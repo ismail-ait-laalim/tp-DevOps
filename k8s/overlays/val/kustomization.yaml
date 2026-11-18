@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: val
+resources:
+  - ../../base
+  - namespace.yaml
+images:
+  - name: DOCKERHUB_USER/tp-backend
+    newTag: val
+  - name: DOCKERHUB_USER/tp-frontend
+    newTag: val
+patches:
+  - target: { kind: Service, name: frontend }
+    patch: |-
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+  - target: { kind: Deployment, name: backend }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: APP_ENV, value: val }

@@ -1,0 +1,26 @@
+# Environnement DEV (poste de chaque membre) : docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: tasks
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+  backend:
+    build: ./backend
+    environment:
+      DB_HOST: db
+      DB_USER: app
+      DB_PASSWORD: app
+      DB_NAME: tasks
+      APP_ENV: dev
+    depends_on: [db]
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on: [backend]
+volumes:
+  dbdata:

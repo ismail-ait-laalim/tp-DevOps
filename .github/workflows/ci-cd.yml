@@ -1,0 +1,72 @@
+name: CI/CD
+
+# dev -> val -> main (prod)
+on:
+  push:
+    branches: [dev, val, main]
+  pull_request:
+    branches: [dev, val, main]
+
+env:
+  IMAGE_BACKEND: ${{ secrets.DOCKERHUB_USERNAME }}/tp-backend
+  IMAGE_FRONTEND: ${{ secrets.DOCKERHUB_USERNAME }}/tp-frontend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
+
+  build-push:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: vars
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev)  echo "tag=dev"  >> $GITHUB_OUTPUT ;;
+            val)  echo "tag=val"  >> $GITHUB_OUTPUT ;;
+            main) echo "tag=prod" >> $GITHUB_OUTPUT ;;
+          esac
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:${{ steps.vars.outputs.tag }}
+            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:${{ steps.vars.outputs.tag }}
+            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+
+  # Déploiement K8s via runner self-hosted installé sur le poste qui héberge K8s
+  deploy:
+    needs: build-push
+    if: github.event_name == 'push' && (github.ref_name == 'val' || github.ref_name == 'main')
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: |
+          ENV=$([ "${GITHUB_REF_NAME}" = "main" ] && echo prod || echo val)
+          sed -i "s#DOCKERHUB_USER#${{ secrets.DOCKERHUB_USERNAME }}#g" k8s/base/*.yaml k8s/overlays/$ENV/kustomization.yaml
+          kubectl apply -k k8s/overlays/$ENV
+          kubectl -n $ENV rollout restart deployment/backend deployment/frontend
+          kubectl -n $ENV rollout status deployment/backend --timeout=120s
+          kubectl -n $ENV rollout status deployment/frontend --timeout=120s
