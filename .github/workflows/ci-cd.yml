@@ -63,6 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Deploy
+        shell: bash
         run: |
           ENV=$([ "${GITHUB_REF_NAME}" = "main" ] && echo prod || echo val)
           sed -i "s#DOCKERHUB_USER#${{ secrets.DOCKERHUB_USERNAME }}#g" k8s/base/*.yaml k8s/overlays/$ENV/kustomization.yaml
