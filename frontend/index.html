@@ -13,6 +13,7 @@
 </head>
 <body>
   <h1>Mes tâches</h1>
+  <p id="task-count">Nombre de tâches : 0</p>
   <small id="env"></small>
   <div><input id="title" placeholder="Nouvelle tâche"> <button onclick="add()">Ajouter</button></div>
   <ul id="list"></ul>
@@ -21,6 +22,8 @@
       const h = await (await fetch('/api/health')).json();
       document.getElementById('env').textContent = 'Environnement : ' + h.env;
       const tasks = await (await fetch('/api/tasks')).json();
+      document.getElementById('task-count').textContent =
+      'Nombre de tâches : ' + tasks.length;
       document.getElementById('list').innerHTML = tasks.map(t => `<li>${t.title}</li>`).join('');
     }
     async function add() {
