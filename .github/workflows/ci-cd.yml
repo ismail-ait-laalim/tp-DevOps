@@ -63,10 +63,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Deploy
+        shell: powershell
         run: |
-          ENV=$([ "${GITHUB_REF_NAME}" = "main" ] && echo prod || echo val)
-          sed -i "s#DOCKERHUB_USER#${{ secrets.DOCKERHUB_USERNAME }}#g" k8s/base/*.yaml k8s/overlays/$ENV/kustomization.yaml
-          kubectl apply -k k8s/overlays/$ENV
-          kubectl -n $ENV rollout restart deployment/backend deployment/frontend
-          kubectl -n $ENV rollout status deployment/backend --timeout=120s
-          kubectl -n $ENV rollout status deployment/frontend --timeout=120s
+          $envName = if ($env:GITHUB_REF_NAME -eq "main") { "prod" } else { "val" }
+          $user = "${{ secrets.DOCKERHUB_USERNAME }}"
+          Get-ChildItem k8s -Recurse -Filter *.yaml | ForEach-Object {
+            $c = [IO.File]::ReadAllText($_.FullName).Replace("DOCKERHUB_USER", $user)
+            [IO.File]::WriteAllText($_.FullName, $c)
+          }
+          kubectl apply -k "k8s/overlays/$envName"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          kubectl -n $envName rollout restart deployment/backend deployment/frontend
+          kubectl -n $envName rollout status deployment/backend --timeout=180s
+          kubectl -n $envName rollout status deployment/frontend --timeout=180s
